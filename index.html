@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123b72">
+<title>Sandeep Print Studio — Photo Print Tools</title>
+<style>
+:root{--navy:#123b72;--blue:#1769aa;--bg:#f3f6fb;--ink:#172338;--muted:#65748b;--line:#dce4ef;--white:#fff}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:linear-gradient(125deg,#123b72,#1976b9);color:white;padding:25px 16px 30px}
+.wrap{max-width:1000px;margin:auto;padding:0 14px}.brand{font-weight:800;font-size:24px;letter-spacing:.2px}.tag{opacity:.9;margin-top:5px;font-size:14px}
+main{padding:18px 0 34px}.layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 6px 24px #102b4c0a}
+h2{font-size:18px;margin:0 0 14px}.field{margin:13px 0}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+input[type=file],select,input[type=number],input[type=text]{width:100%;border:1px solid #cbd6e5;border-radius:10px;padding:11px;background:white;color:var(--ink);font:inherit}
+input[type=range]{width:100%}.hint{font-size:12px;color:var(--muted);line-height:1.5}
+.btn{border:0;border-radius:10px;padding:12px 15px;background:var(--blue);color:white;font-weight:750;font-size:14px;cursor:pointer}.btn.secondary{background:#e8f1fb;color:#174a7d}.btn:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.preview{min-height:260px;border:1px dashed #bdcadb;border-radius:12px;background:#f8fafd;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:12px}
+#photoPreview{display:none;max-width:100%;max-height:330px;object-fit:contain}.empty{text-align:center;color:var(--muted);font-size:14px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.pill{font-size:12px;background:#edf4fc;color:#244f7b;border-radius:30px;padding:6px 9px}
+.notice{background:#fff7e6;border:1px solid #f2dfb3;padding:12px;border-radius:10px;font-size:12px;line-height:1.5;margin-top:14px}
+footer{padding:18px 0 28px;text-align:center;color:var(--muted);font-size:12px}
+@media(max-width:720px){.layout{grid-template-columns:1fr}.brand{font-size:22px}.panel{padding:15px}}
+/* The print page is generated separately in a new tab. */
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="brand" id="brandName">Sandeep Print Studio</div><div class="tag">Simple photo sizing and A4 print-sheet maker</div></div></header>
+<main class="wrap">
+<div class="layout">
+<section class="panel">
+<h2>1. Upload and set up</h2>
+<div class="field"><label for="upload">Choose a photo</label><input id="upload" type="file" accept="image/jpeg,image/png,image/webp"></div>
+<div class="field"><label for="size">Photo size</label>
+<select id="size">
+<option value="35x45">Passport photo — 35 × 45 mm</option>
+<option value="25x25">Square photo — 25 × 25 mm</option>
+<option value="30x40">Photo — 30 × 40 mm</option>
+<option value="custom">Custom size</option>
+</select></div>
+<div id="customFields" style="display:none">
+<div class="field"><label for="customW">Width (mm)</label><input id="customW" type="number" min="10" max="100" value="35"></div>
+<div class="field"><label for="customH">Height (mm)</label><input id="customH" type="number" min="10" max="100" value="45"></div>
+</div>
+<div class="field"><label for="count">Number of copies</label><input id="count" type="number" min="1" max="60" value="8"></div>
+<div class="field"><label for="fit">Photo fit</label><select id="fit"><option value="cover">Fill frame (crop edges if needed)</option><option value="contain">Fit entire photo (may leave white edges)</option></select></div>
+<div class="field"><label for="brightness">Brightness: <span id="brightLabel">100%</span></label><input id="brightness" type="range" min="60" max="140" value="100"></div>
+<div class="actions"><button class="btn secondary" id="resetBtn" type="button">Reset</button><button class="btn" id="makeBtn" type="button" disabled>Prepare A4 print sheet</button></div>
+<div class="notice"><strong>Privacy:</strong> Your photo is processed in this browser. This starter website does not upload it to a server or save it online. Use only photos you have permission to print.</div>
+</section>
+<section class="panel">
+<h2>2. Preview</h2>
+<div class="preview"><div class="empty" id="empty">Your selected photo will appear here.</div><img id="photoPreview" alt="Selected photo preview"></div>
+<div class="stats"><span class="pill" id="fileInfo">No photo selected</span><span class="pill" id="sizeInfo">35 × 45 mm</span></div>
+<p class="hint">The print sheet uses A4 paper. In the print dialog, select A4 paper and set scale to 100% / Actual size. Printer margins and printer settings can affect the final result, so measure a test print.</p>
+<div class="actions"><button class="btn" id="downloadBtn" type="button" disabled>Download photo</button><button class="btn secondary" id="printBtn" type="button" disabled>Open print sheet</button></div>
+</section>
+</div>
+</main>
+<footer class="wrap">Independent photo utility. Not affiliated with UIDAI or any government agency.</footer>
+<script>
+const $ = id => document.getElementById(id);
+let photoURL = null, image = null;
+const sizeSelect=$('size'), customFields=$('customFields'), preview=$('photoPreview');
+function dimensions(){
+ if(sizeSelect.value==='custom') return {w:Math.max(10,Math.min(100,Number($('customW').value)||35)),h:Math.max(10,Math.min(100,Number($('customH').value)||45))};
+ const [w,h]=sizeSelect.value.split('x').map(Number);return {w,h};
+}
+function updateSize(){
+ const d=dimensions();$('sizeInfo').textContent=`${d.w} × ${d.h} mm`;
+ customFields.style.display=sizeSelect.value==='custom'?'block':'none';
+ if(image) updatePreview();
+}
+function updatePreview(){
+ if(!image)return;
+ preview.style.objectFit=$('fit').value==='cover'?'cover':'contain';
+ preview.style.filter=`brightness(${$('brightness').value}%)`;
+ $('brightLabel').textContent=$('brightness').value+'%';
+}
+$('upload').addEventListener('change',e=>{
+ const file=e.target.files && e.target.files[0]; if(!file)return;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)){alert('Please choose a JPG, PNG or WebP image.');return;}
+ if(file.size>15*1024*1024){alert('Please choose an image smaller than 15 MB.');return;}
+ if(photoURL)URL.revokeObjectURL(photoURL);
+ photoURL=URL.createObjectURL(file);image=new Image();
+ image.onload=()=>{
+  preview.src=photoURL;preview.style.display='block';$('empty').style.display='none';
+  $('fileInfo').textContent=`${image.naturalWidth} × ${image.naturalHeight} px`;
+  $('makeBtn').disabled=false;$('downloadBtn').disabled=false;$('printBtn').disabled=false;updatePreview();
+ };image.onerror=()=>alert('Could not read this image. Please try another file.');
+ image.src=photoURL;
+});
+sizeSelect.addEventListener('change',updateSize);
+$('customW').addEventListener('input',updateSize);$('customH').addEventListener('input',updateSize);
+$('fit').addEventListener('change',updatePreview);$('brightness').addEventListener('input',updatePreview);
+$('resetBtn').addEventListener('click',()=>{
+ $('upload').value='';if(photoURL)URL.revokeObjectURL(photoURL);photoURL=null;image=null;
+ preview.removeAttribute('src');preview.style.display='none';$('empty').style.display='block';
+ $('fileInfo').textContent='No photo selected';$('makeBtn').disabled=true;$('downloadBtn').disabled=true;$('printBtn').disabled=true;
+ sizeSelect.value='35x45';$('count').value=8;$('fit').value='cover';$('brightness').value=100;updateSize();updatePreview();
+});
+function processedCanvas(w,h){
+ const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
+ ctx.filter=`brightness(${$('brightness').value}%)`;
+ const ratio=dimensions().w/dimensions().h, srcRatio=image.naturalWidth/image.naturalHeight;
+ let sx=0,sy=0,sw=image.naturalWidth,sh=image.naturalHeight;
+ if($('fit').value==='cover'){
+  if(srcRatio>ratio){sw=image.naturalHeight*ratio;sx=(image.naturalWidth-sw)/2;}
+  else{sh=image.naturalWidth/ratio;sy=(image.naturalHeight-sh)/2;}
+  ctx.drawImage(image,sx,sy,sw,sh,0,0,w,h);
+ } else {
+  const scale=Math.min(w/image.naturalWidth,h/image.naturalHeight);
+  const dw=image.naturalWidth*scale,dh=image.naturalHeight*scale;
+  ctx.drawImage(image,(w-dw)/2,(h-dh)/2,dw,dh);
+ }
+ ctx.filter='none';return c;
+}
+function buildPrintHTML(){
+ const d=dimensions(), count=Math.max(1,Math.min(60,Number($('count').value)||1));
+ // 96 CSS px/in is the standard CSS conversion; mm is converted for print layout.
+ const width=d.w/25.4, height=d.h/25.4;
+ const cellW=d.w+'mm',cellH=d.h+'mm';
+ const canvas=processedCanvas(Math.round(d.w/25.4*300),Math.round(d.h/25.4*300));
+ const data=canvas.toDataURL('image/jpeg',0.95);
+ const cols=Math.max(1,Math.floor((210-12)/d.w));
+ const rows=Math.max(1,Math.floor((297-12)/d.h));
+ const fit=$('fit').value;
+ let cells='';
+ for(let i=0;i<count;i++) cells+=`<div class="cell"><img src="${data}" style="object-fit:fill" alt="Photo copy ${i+1}"></div>`;
+ return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A4 Photo Print Sheet</title>
+ <style>@page{size:A4 portrait;margin:6mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.sheet{display:grid;grid-template-columns:repeat(${cols},${cellW});grid-auto-rows:${cellH};gap:2mm;align-content:start;justify-content:start}.cell{width:${cellW};height:${cellH};overflow:hidden;border:.15mm solid #ddd}.cell img{display:block;width:100%;height:100%}.tip{font-size:11px;color:#555;margin:0 0 4mm}@media print{.tip{display:none}}</style></head><body><p class="tip">Print on A4 paper at 100% / Actual size. Check one test print with a ruler before printing more copies.</p><div class="sheet">${cells}</div><script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),500)});<\/script></body></html>`;
+}
+function openPrint(){
+ if(!image)return;
+ const w=window.open('','_blank');
+ if(!w){alert('Pop-up blocked. Allow pop-ups for this website, then try again.');return;}
+ w.document.open();w.document.write(buildPrintHTML());w.document.close();
+}
+$('makeBtn').addEventListener('click',openPrint);$('printBtn').addEventListener('click',openPrint);
+$('downloadBtn').addEventListener('click',()=>{
+ if(!image)return;const d=dimensions();const c=processedCanvas(Math.round(d.w/25.4*300),Math.round(d.h/25.4*300));
+ const a=document.createElement('a');a.href=c.toDataURL('image/jpeg',0.95);a.download=`photo-${d.w}x${d.h}mm.jpg`;a.click();
+});
+updateSize();updatePreview();
+</script>
+</body>
+</html>
